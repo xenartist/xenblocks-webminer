@@ -41,50 +41,33 @@ function formatTime(seconds) {
     return `${hours}h ${minutes}m ${secs}s`;
 }
 
-function updateMiningParameters() {
+async function updateMiningParameters() {
     const difficultyElement = document.getElementById('current-difficulty');
     if (difficultyElement) {
         difficultyElement.textContent = 'Fetching current difficulty...';
     }
 
-    return new Promise((resolve, reject) => {
-        const fetchPromise = fetch('https://api.allorigins.win/get?url=' + encodeURIComponent('http://xenblocks.io/difficulty'))
-            .then(response => response.json())
-            .then(data => {
-                if (data.contents) {
-                    const difficulty = JSON.parse(data.contents).difficulty;
-                    if (difficulty) {
-                        memory_cost = parseInt(difficulty);
-                    }
-                    console.log(`Updated mining parameters: Difficulty=${memory_cost}`);
-                    
-                    // Update UI
-                    if (difficultyElement) {
-                        difficultyElement.textContent = `Current Difficulty: ${memory_cost.toLocaleString()}`;
-                    }
-                    resolve();
-                } else {
-                    throw new Error('Invalid response from server');
-                }
-            });
-
-        const timeoutPromise = new Promise((_, timeoutReject) => {
-            setTimeout(() => {
-                timeoutReject(new Error('Difficulty fetch timed out'));
-            }, 60000); // 60 second timeout
-        });
-
-        Promise.race([fetchPromise, timeoutPromise])
-            .catch(error => {
-                console.error('Error updating mining parameters:', error);
-                
-                // Update UI to show error
-                if (difficultyElement) {
-                    difficultyElement.textContent = 'Error fetching difficulty';
-                }
-                reject(error);
-            });
-    });
+    try {
+        const response = await fetch('https://raw.githubusercontent.com/xenartist/xenblocks-difficulty-tracker/refs/heads/main/difficulty.json');
+        const data = await response.json();
+        
+        if (data && data.difficulty) {
+            memory_cost = parseInt(data.difficulty);
+            console.log(`Updated mining parameters: Difficulty=${memory_cost}`);
+            
+            if (difficultyElement) {
+                difficultyElement.textContent = `Current Difficulty: ${memory_cost.toLocaleString()} (Last updated: ${new Date(data.last_updated).toLocaleString()})`;
+            }
+        } else {
+            throw new Error('Difficulty not found in the response');
+        }
+    } catch (error) {
+        console.error('Error updating mining parameters:', error);
+        if (difficultyElement) {
+            difficultyElement.textContent = 'Error fetching difficulty';
+        }
+        throw error;
+    }
 }
 
 async function mine_block() {
