@@ -1,11 +1,15 @@
 // Global variables
-let memory_cost = 1500;
+let memory_cost = 1500; // Fixed at 1500 KB
 let difficulty = 1;
 let account = '';
 const stored_targets = ['XEN11', 'XUNI'];
 let mining = false;
 let totalMiningTime = 0;
 let miningStartTime;
+
+let lastAttempts = 0;
+let lastSpeed = 0;
+let lastUpdateTime = 0;
 
 // Helper functions
 function hash_value(value) {
@@ -35,10 +39,6 @@ function formatTime(seconds) {
     return `${hours}h ${minutes}m ${secs}s`;
 }
 
-let lastAttempts = 0;
-let lastSpeed = 0;
-let lastUpdateTime = 0;
-
 async function mine_block() {
     const status_div = document.getElementById('status');
     status_div.innerHTML = 'Mining...';
@@ -51,32 +51,39 @@ async function mine_block() {
     const start_time = Date.now();
     lastUpdateTime = start_time;
 
-    function updateStatus() {
+    function updateAttempts() {
+        status_div.innerHTML = `Mining Hashes: ${formatNumber(attempts)}${getSpeedAndTimeString()}`;
+    }
+
+    function getSpeedAndTimeString() {
+        return `, Speed: ${lastSpeed.toFixed(2)} H/s, Total Mining Time: ${formatTime(totalMiningTime)}`;
+    }
+
+    function updateSpeedAndTime() {
         const current_time = Date.now();
         const elapsed_time = (current_time - lastUpdateTime) / 1000;
         
-        if (elapsed_time >= 5) {
-            const newAttempts = attempts - lastAttempts;
-            lastSpeed = newAttempts / elapsed_time;
-            lastAttempts = attempts;
-            totalMiningTime += Math.floor(elapsed_time);
-            lastUpdateTime = current_time;
-        }
+        const newAttempts = attempts - lastAttempts;
+        lastSpeed = newAttempts / elapsed_time;
+        lastAttempts = attempts;
+        totalMiningTime += Math.floor(elapsed_time);
+        lastUpdateTime = current_time;
 
-        let statusMessage = `Mining... Attempts: ${formatNumber(attempts)}`;
-        statusMessage += `, Speed: ${lastSpeed.toFixed(2)} H/s`;
-        statusMessage += `, Total Mining Time: ${formatTime(totalMiningTime)}`;
-        
-        status_div.innerHTML = statusMessage;
+        updateAttempts();
     }
+
+    // Set up interval for updating speed and time every 5 seconds
+    const updateInterval = setInterval(() => {
+        if (mining) {
+            updateSpeedAndTime();
+        } else {
+            clearInterval(updateInterval);
+        }
+    }, 5000);
 
     while (mining) {
         attempts++;
-        if (attempts % 100 === 0) {
-            updateStatus();
-            // Allow UI to update
-            await new Promise(resolve => setTimeout(resolve, 0));
-        }
+        updateAttempts();
 
         const random_data = generate_random_sha256();
         
@@ -103,7 +110,7 @@ async function mine_block() {
             }
 
             if (found_valid_hash) {
-                updateStatus(); 
+                updateSpeedAndTime(); // Update final status
                 status_div.innerHTML += '<br>Valid hash found!';
                 mining = false;
                 break;
@@ -114,7 +121,12 @@ async function mine_block() {
             mining = false;
             break;
         }
+
+        // Allow UI to update
+        await new Promise(resolve => setTimeout(resolve, 0));
     }
+
+    clearInterval(updateInterval);
 
     if (!mining) {
         status_div.innerHTML += '<br>Mining stopped.';
