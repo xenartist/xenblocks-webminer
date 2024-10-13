@@ -1,6 +1,6 @@
 // Global variables
-let memory_cost = 1500; // Fixed at 1500 KB
-let difficulty = 1;
+let memory_cost = 1500; // Initial value, in KB
+const difficulty = 1; // Fixed value for Argon2 time parameter
 let account = '';
 const stored_targets = ['XEN11', 'XUNI'];
 let mining = false;
@@ -37,6 +37,52 @@ function formatTime(seconds) {
     const minutes = Math.floor((seconds % 3600) / 60);
     const secs = Math.floor(seconds % 60);
     return `${hours}h ${minutes}m ${secs}s`;
+}
+
+function updateMiningParameters() {
+    const difficultyElement = document.getElementById('current-difficulty');
+    if (difficultyElement) {
+        difficultyElement.textContent = 'Fetching current difficulty...';
+    }
+
+    return new Promise((resolve, reject) => {
+        const fetchPromise = fetch('https://api.allorigins.win/get?url=' + encodeURIComponent('http://xenblocks.io/difficulty'))
+            .then(response => response.json())
+            .then(data => {
+                if (data.contents) {
+                    const difficulty = JSON.parse(data.contents).difficulty;
+                    if (difficulty) {
+                        memory_cost = parseInt(difficulty);
+                    }
+                    console.log(`Updated mining parameters: Difficulty=${memory_cost}`);
+                    
+                    // Update UI
+                    if (difficultyElement) {
+                        difficultyElement.textContent = `Current Difficulty: ${memory_cost.toLocaleString()}`;
+                    }
+                    resolve();
+                } else {
+                    throw new Error('Invalid response from server');
+                }
+            });
+
+        const timeoutPromise = new Promise((_, timeoutReject) => {
+            setTimeout(() => {
+                timeoutReject(new Error('Difficulty fetch timed out'));
+            }, 60000); // 60 second timeout
+        });
+
+        Promise.race([fetchPromise, timeoutPromise])
+            .catch(error => {
+                console.error('Error updating mining parameters:', error);
+                
+                // Update UI to show error
+                if (difficultyElement) {
+                    difficultyElement.textContent = 'Error fetching difficulty';
+                }
+                reject(error);
+            });
+    });
 }
 
 async function mine_block() {
@@ -91,17 +137,18 @@ async function mine_block() {
             const result = await argon2.hash({
                 pass: random_data,
                 salt: salt.toString(),
-                time: difficulty,
-                mem: memory_cost,
+                time: difficulty, // This remains constant
+                mem: memory_cost, // This is updated periodically
                 parallelism: 1,
                 type: argon2.ArgonType.Argon2id,
                 hashLen: 32
             });
 
             const hashed_data = result.hashHex;
+            const last_87_chars = hashed_data.slice(-87);
 
             for (const target of stored_targets) {
-                if (hashed_data.indexOf(target) !== -1) {
+                if (last_87_chars.includes(target)) {
                     if ((target === 'XUNI' && /XUNI[0-9]/.test(hashed_data) && is_within_five_minutes_of_hour()) || target === 'XEN11') {
                         found_valid_hash = true;
                         break;
@@ -112,6 +159,44 @@ async function mine_block() {
             if (found_valid_hash) {
                 updateSpeedAndTime(); // Update final status
                 status_div.innerHTML += '<br>Valid hash found!';
+                
+                                // Prepare payload for verification
+                                const payload = {
+                                    hash_to_verify: hashed_data,
+                                    key: random_data,
+                                    account: account,
+                                    attempts: attempts,
+                                    hashes_per_second: lastSpeed,
+                                    worker: worker_id // Ensure this is defined somewhere in your code
+                                };
+                
+                                try {
+                                    const response = await fetch('http://xenblocks.io/verify', {
+                                        method: 'POST',
+                                        headers: {
+                                            'Content-Type': 'application/json',
+                                        },
+                                        body: JSON.stringify(payload)
+                                    });
+                
+                                    console.log("HTTP Status Code:", response.status);
+                                    const responseData = await response.json();
+                                    console.log("Server Response:", responseData);
+                
+                                    if (target === "XEN11" && response.status === 200) {
+                                        // Call submit_pow
+                                        const powResult = await submit_pow(account, random_data, hashed_data);
+                                        if (powResult) {
+                                            status_div.innerHTML += '<br>Proof of Work submitted successfully!';
+                                        } else {
+                                            status_div.innerHTML += '<br>Failed to submit Proof of Work.';
+                                        }
+                                    }
+                                } catch (error) {
+                                    console.error("An error occurred during verification:", error);
+                                    status_div.innerHTML += '<br>Error occurred during verification. Check console for details.';
+                                }
+                
                 mining = false;
                 break;
             }
@@ -133,6 +218,109 @@ async function mine_block() {
     }
 }
 
+async function submit_pow(account, key, hash_to_verify) {
+    const last_block_url = 'http://xenminer.mooo.com:4445/getblocks/lastblock';
+    const submit_url = 'http://xenblocks.io:4446/send_pow';
+
+    try {
+        // Fetch the last block record with retry
+        const response = await retryRequest(() => fetch(last_block_url));
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const records = await response.json();
+
+        // Process the records
+        const verified_hashes = [];
+        let output_block_id;
+
+        for (const record of records) {
+            const { block_id, hash_to_verify: record_hash_to_verify, key: record_key, account: record_account } = record;
+
+            // Verify the hash using Argon2
+            if (await argon2.verify(record_hash_to_verify, record_key)) {
+                verified_hashes.push(hash_value(block_id + record_hash_to_verify + record_key + record_account));
+            }
+
+            // Save the block_id from the last record
+            output_block_id = Math.floor(block_id / 100);
+        }
+
+        // Build Merkle root
+        const merkle_root = build_merkle_tree(verified_hashes);
+
+        // Prepare payload for PoW
+        const payload = {
+            account_address: account,
+            block_id: output_block_id,
+            merkle_root,
+            key,
+            hash_to_verify
+        };
+
+        // Send POST request with retry
+        const pow_response = await retryRequest(() => 
+            fetch(submit_url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(payload)
+            })
+        );
+
+        if (!pow_response.ok) {
+            throw new Error(`HTTP error! status: ${pow_response.status}`);
+        }
+
+        const result = await pow_response.json();
+        console.log('Proof of Work successful:', result);
+        console.log(`Block ID: ${output_block_id}, Merkle Root: ${merkle_root}`);
+
+        return result;
+    } catch (error) {
+        console.error('Error submitting POW:', error);
+        return null;
+    }
+}
+
+function build_merkle_tree(hashes) {
+    let merkle_tree = {};
+
+    function build(elements) {
+        if (elements.length === 1) {
+            return [elements[0], merkle_tree];
+        }
+
+        let new_elements = [];
+        for (let i = 0; i < elements.length; i += 2) {
+            let left = elements[i];
+            let right = (i + 1 < elements.length) ? elements[i + 1] : left;
+            let combined = left + right;
+            let new_hash = hash_value(combined);
+            merkle_tree[new_hash] = { left: left, right: right };
+            new_elements.push(new_hash);
+        }
+        return build(new_elements);
+    }
+
+    return build(elements)[0]; // Return only the root hash
+}
+
+async function retryRequest(fn, maxRetries = 2, delay = 10000) {
+    for (let i = 0; i <= maxRetries; i++) {
+        try {
+            return await fn();
+        } catch (error) {
+            if (i === maxRetries) {
+                throw error;
+            }
+            console.log(`Retrying... (${i + 1}/${maxRetries})`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+        }
+    }
+}
+
 function startMining() {
     const accountInput = document.getElementById('account');
     account = accountInput.value;
@@ -142,12 +330,28 @@ function startMining() {
     }
     
     if (!mining) {
-        mining = true;
-        miningStartTime = Date.now();
-        lastAttempts = 0;
-        lastSpeed = 0;
-        lastUpdateTime = miningStartTime;
-        mine_block();
+        // First, update mining parameters and wait for it to complete
+        updateMiningParameters()
+            .then(() => {
+                mining = true;
+                miningStartTime = Date.now();
+                lastAttempts = 0;
+                lastSpeed = 0;
+                lastUpdateTime = miningStartTime;
+                
+                // Start the periodic update
+                setInterval(updateMiningParameters, 60000);
+                
+                // Save account
+                saveAccount();
+                
+                // Start mining
+                mine_block();
+            })
+            .catch(error => {
+                console.error('Failed to start mining:', error);
+                alert('Failed to fetch current difficulty. Please try again.');
+            });
     } else {
         alert('Mining is already in progress.');
     }
