@@ -204,12 +204,13 @@ async function mine_block() {
 }
 
 async function submit_pow(account, key, hash_to_verify) {
-    const last_block_url = 'http://xenminer.mooo.com:4445/getblocks/lastblock';
+    const corsProxy = 'https://cors-anywhere.herokuapp.com/';
+    const last_block_url = 'http://xenblocks.io:4445/getblocks/lastblock';
     const submit_url = 'http://xenblocks.io:4446/send_pow';
 
     try {
         // Fetch the last block record with retry
-        const response = await retryRequest(() => fetch(last_block_url));
+        const response = await retryRequest(() => fetch(corsProxy + last_block_url));
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
@@ -245,7 +246,7 @@ async function submit_pow(account, key, hash_to_verify) {
 
         // Send POST request with retry
         const pow_response = await retryRequest(() => 
-            fetch(submit_url, {
+            fetch(corsProxy + submit_url, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -292,7 +293,7 @@ function build_merkle_tree(hashes) {
     return build(elements)[0]; // Return only the root hash
 }
 
-async function retryRequest(fn, maxRetries = 2, delay = 10000) {
+async function retryRequest(fn, maxRetries = 3, delay = 10000) {
     for (let i = 0; i <= maxRetries; i++) {
         try {
             return await fn();
@@ -382,3 +383,35 @@ function saveAccount() {
     const accountInput = document.getElementById('account');
     localStorage.setItem('xenBlocksAccount', accountInput.value);
 }
+
+function testXenBlocksAPI() {
+    const statusElement = document.getElementById('api-test-status');
+    if (statusElement) {
+        statusElement.textContent = 'Testing API...';
+    }
+
+    const url = 'https://cors-anywhere.herokuapp.com/http://xenblocks.io:4445/getblocks/lastblock';
+    console.log('Sending request to:', url);
+
+    fetch(url)
+        .then(response => response.json())
+        .then(data => {
+            console.log('API response:', data);
+            if (statusElement) {
+                statusElement.textContent = `API Test Successful. Last Block: ${JSON.stringify(data[0])}`;
+            }
+        })
+        .catch(error => {
+            console.error('Error testing XenBlocks API:', error);
+            if (statusElement) {
+                statusElement.textContent = `API Test Failed: ${error.message}`;
+            }
+        });
+}
+
+document.addEventListener('DOMContentLoaded', (event) => {
+    const testButton = document.getElementById('test-api-button');
+    if (testButton) {
+        testButton.addEventListener('click', testXenBlocksAPI);
+    }
+});
