@@ -323,11 +323,25 @@ async function retryRequest(fn, maxRetries = 2, delay = 10000) {
     }
 }
 
+function validateEthereumAddress(address) {
+    // Check basic format
+    if (!/^0x[a-fA-F0-9]{40}$/.test(address)) {
+        return false;
+    }
+
+    // Check for presence of both uppercase and lowercase letters
+    if (!/[A-F]/.test(address) || !/[a-f]/.test(address)) {
+        return false;
+    }
+
+    return true;
+}
+
 function startMining() {
     const accountInput = document.getElementById('account');
     account = accountInput.value;
-    if (!account) {
-        alert('Please enter your Ethereum address');
+    if (!account || !validateEthereumAddress(account)) {
+        alert('Please enter a valid Ethereum address. It should contain both uppercase and lowercase letters.');
         return;
     }
     
