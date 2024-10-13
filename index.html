@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XENBLOCKS Web Miner</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/argon2-browser/1.18.0/argon2-bundled.min.js"></script>
+</head>
+<body>
+    <h1>XENBLOCKS Web Miner</h1>
+    <label for="account">Account Address:</label>
+    <input type="text" id="account" placeholder="Enter your Ethereum address">
+    <br><br>
+    <button onclick="startMining()">Start Mining</button>
+    <button onclick="stopMining()">Stop Mining</button>
+    <br><br>
+    <div id="status"></div>
+    <script src="miner.js"></script>
+    <p>by @xen_artist</p>
+</body>
+</html>
