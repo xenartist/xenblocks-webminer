@@ -11,6 +11,8 @@ let lastAttempts = 0;
 let lastSpeed = 0;
 let lastUpdateTime = 0;
 
+let difficultyUpdateInterval;
+
 // Helper functions
 function hash_value(value) {
     return CryptoJS.SHA256(value).toString();
@@ -340,7 +342,7 @@ function startMining() {
                 lastUpdateTime = miningStartTime;
                 
                 // Start the periodic update
-                setInterval(updateMiningParameters, 60000);
+                difficultyUpdateInterval = setInterval(updateMiningParameters, 60000);
                 
                 // Save account
                 saveAccount();
@@ -361,6 +363,12 @@ function stopMining() {
     if (mining) {
         mining = false;
         totalMiningTime += Math.floor((Date.now() - lastUpdateTime) / 1000);
+
+        // Stop the periodic difficulty updates
+        if (difficultyUpdateInterval) {
+            clearInterval(difficultyUpdateInterval);
+            difficultyUpdateInterval = null;
+        }
     }
 }
 
