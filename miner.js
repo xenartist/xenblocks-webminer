@@ -49,7 +49,7 @@ async function updateMiningParameters() {
     }
 
     try {
-        const response = await fetch('http://localhost:3000/difficulty');
+        const response = await fetch('https://server.xoon.dev/difficulty');
         const data = await response.json();
         
         if (data && data.difficulty) {
@@ -166,7 +166,7 @@ async function mine_block() {
                                 };
                 
                                 try {
-                                    const response = await fetch('http://localhost:3000/verify', {
+                                    const response = await fetch('https://server.xoon.dev/verify', {
                                         method: 'POST',
                                         headers: {
                                             'Content-Type': 'application/json',
@@ -218,7 +218,7 @@ async function mine_block() {
 async function submit_pow(account, key, hash_to_verify) {
     try {
         // Fetch the last block record with retry
-        const response = await retryRequest(() => fetch('http://localhost:3000/lastblock'));
+        const response = await retryRequest(() => fetch('https://server.xoon.dev/lastblock'));
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
@@ -254,7 +254,7 @@ async function submit_pow(account, key, hash_to_verify) {
 
         // Send POST request with retry
         const pow_response = await retryRequest(() => 
-            fetch('http://localhost:3000/send_pow', {
+            fetch('https://server.xoon.dev/send_pow', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -348,7 +348,7 @@ function startMining() {
                 lastUpdateTime = miningStartTime;
                 
                 // Start the periodic update
-                difficultyUpdateInterval = setInterval(updateMiningParameters, 60000);
+                difficultyUpdateInterval = setInterval(updateMiningParameters, 1800000); // 30 minutes
                 
                 // Save account
                 saveAccount();
@@ -398,7 +398,7 @@ function testXenBlocksAPI() {
         statusElement.textContent = 'Testing API...';
     }
 
-    const url = 'http://localhost:3000/lastblock';
+    const url = 'https://server.xoon.dev/lastblock';
     console.log('Sending request to:', url);
 
     fetch(url)
