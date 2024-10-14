@@ -40,7 +40,7 @@ async function mine_block() {
                 mem: memory_cost,
                 parallelism: 1,
                 type: argon2.ArgonType.Argon2id,
-                hashLen: 32
+                hashLen: 64
             });
 
             const hashed_data = result.hashHex;
