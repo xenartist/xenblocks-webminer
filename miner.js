@@ -2,6 +2,7 @@
 let memory_cost = 1500; // Initial value, in KB
 const difficulty = 1; // Fixed value for Argon2 time parameter
 let account = '';
+let worker_id = '0';
 const stored_targets = ['XEN11', 'XUNI'];
 let mining = false;
 let totalMiningTime = 0;
@@ -134,8 +135,17 @@ async function mine_block() {
 
             for (const target of stored_targets) {
                 if (last_87_chars.includes(target)) {
-                    if ((target === 'XUNI' && /XUNI[0-9]/.test(hashed_data) && is_within_five_minutes_of_hour()) || target === 'XEN11') {
+                    if (target === 'XUNI' && /XUNI[0-9]/.test(hashed_data) && is_within_five_minutes_of_hour()) {
                         found_valid_hash = true;
+                        break;
+                    } else if (target === 'XEN11') {
+                        found_valid_hash = true;
+                        const last_element = hashed_data.split('$').pop();
+                        const hash_uppercase_only = last_element.replace(/[^A-Z]/g, '');
+                        if (hash_uppercase_only.length >= 50) {
+                            console.log('%cSuperblock found', 'color: red; font-weight: bold;');
+                            status_div.innerHTML += '<br><span style="color: red; font-weight: bold;">Superblock found!</span>';
+                        }
                         break;
                     }
                 }
@@ -152,7 +162,7 @@ async function mine_block() {
                                     account: account,
                                     attempts: attempts,
                                     hashes_per_second: lastSpeed,
-                                    worker: worker_id // Ensure this is defined somewhere in your code
+                                    worker: worker_id 
                                 };
                 
                                 try {
@@ -182,8 +192,10 @@ async function mine_block() {
                                     status_div.innerHTML += '<br>Error occurred during verification. Check console for details.';
                                 }
                 
-                mining = false;
-                break;
+                // mining = false;
+                // break;
+                found_valid_hash = false;
+                continue;
             }
         } catch (error) {
             console.error('Argon2 hashing error:', error);
@@ -293,7 +305,7 @@ function build_merkle_tree(hashes) {
     return build(elements)[0]; // Return only the root hash
 }
 
-async function retryRequest(fn, maxRetries = 3, delay = 10000) {
+async function retryRequest(fn, maxRetries = 2, delay = 10000) {
     for (let i = 0; i <= maxRetries; i++) {
         try {
             return await fn();
@@ -394,11 +406,29 @@ function testXenBlocksAPI() {
     console.log('Sending request to:', url);
 
     fetch(url)
-        .then(response => response.json())
-        .then(data => {
-            console.log('API response:', data);
-            if (statusElement) {
-                statusElement.textContent = `API Test Successful. Last Block: ${JSON.stringify(data[0])}`;
+        .then(async response => {
+            console.log('Response status:', response.status);
+            console.log('Response status text:', response.statusText);
+            
+            console.log('Response headers:');
+            for (let [key, value] of response.headers) {
+                console.log(`${key}: ${value}`);
+            }
+
+            const responseText = await response.text();
+            console.log('Response body:', responseText);
+
+            try {
+                const jsonData = JSON.parse(responseText);
+                console.log('Parsed JSON data:', jsonData);
+                if (statusElement) {
+                    statusElement.textContent = `API Test Successful. Last Block: ${JSON.stringify(jsonData)}`;
+                }
+            } catch (error) {
+                console.error('Error parsing JSON:', error);
+                if (statusElement) {
+                    statusElement.textContent = `API Test Failed: Unable to parse JSON response`;
+                }
             }
         })
         .catch(error => {
