@@ -57,7 +57,7 @@ async function updateMiningParameters() {
             console.log(`Updated mining parameters: Difficulty=${memory_cost}`);
             
             if (difficultyElement) {
-                difficultyElement.textContent = `Current Difficulty: ${memory_cost.toLocaleString()} (Last updated: ${new Date(data.last_updated).toLocaleString()})`;
+                difficultyElement.textContent = `Current Difficulty: ${memory_cost.toLocaleString()}`;
             }
         } else {
             throw new Error('Difficulty not found in the response');
