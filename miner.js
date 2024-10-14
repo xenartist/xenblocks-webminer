@@ -11,26 +11,16 @@ let miningStartTime;
 let lastAttempts = 0;
 let lastSpeed = 0;
 let lastUpdateTime = 0;
+let lastVisibleTime = 0;
+
+let worker;
+let totalHashes = 0;
+let displayedHashes = 0;
 
 let difficultyUpdateInterval;
+let miningUpdateInterval;
 
 // Helper functions
-function hash_value(value) {
-    return CryptoJS.SHA256(value).toString();
-}
-
-function generate_random_sha256(max_length = 128) {
-    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()';
-    const random_string = Array.from({length: Math.floor(Math.random() * max_length) + 1}, () => characters[Math.floor(Math.random() * characters.length)]).join('');
-    return CryptoJS.SHA256(random_string).toString();
-}
-
-function is_within_five_minutes_of_hour() {
-    const now = new Date();
-    const minutes = now.getMinutes();
-    return minutes < 5 || minutes >= 55;
-}
-
 function formatNumber(num) {
     return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
@@ -49,7 +39,14 @@ async function updateMiningParameters() {
     }
 
     try {
-        const response = await fetch('https://raw.githubusercontent.com/xenartist/xenblocks-difficulty-tracker/refs/heads/main/difficulty.json');
+        const response = await retryRequest(() => 
+            fetch('https://raw.githubusercontent.com/xenartist/xenblocks-difficulty-tracker/refs/heads/main/difficulty.json')
+        );
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
         const data = await response.json();
         
         if (data && data.difficulty) {
@@ -71,162 +68,165 @@ async function updateMiningParameters() {
     }
 }
 
-async function mine_block() {
-    const status_div = document.getElementById('status');
-    status_div.innerHTML = 'Mining...';
-
-    let found_valid_hash = false;
-    const remove_prefix_address = account.slice(2);
-    const salt = CryptoJS.enc.Hex.parse(remove_prefix_address);
-
-    let attempts = 0;
-    const start_time = Date.now();
-    lastUpdateTime = start_time;
-
-    function updateAttempts() {
-        status_div.innerHTML = `Mining Hashes: ${formatNumber(attempts)}${getSpeedAndTimeString()}`;
+function startMining() {
+    const accountInput = document.getElementById('account');
+    account = accountInput.value;
+    if (!account || !validateEthereumAddress(account)) {
+        alert('Please enter a valid Ethereum address. It should contain both uppercase and lowercase letters.');
+        return;
     }
-
-    function getSpeedAndTimeString() {
-        return `, Speed: ${lastSpeed.toFixed(2)} H/s, Total Mining Time: ${formatTime(totalMiningTime)}`;
-    }
-
-    function updateSpeedAndTime() {
-        const current_time = Date.now();
-        const elapsed_time = (current_time - lastUpdateTime) / 1000;
-        
-        const newAttempts = attempts - lastAttempts;
-        lastSpeed = newAttempts / elapsed_time;
-        lastAttempts = attempts;
-        totalMiningTime += Math.floor(elapsed_time);
-        lastUpdateTime = current_time;
-
-        updateAttempts();
-    }
-
-    // Set up interval for updating speed and time every 5 seconds
-    const updateInterval = setInterval(() => {
-        if (mining) {
-            updateSpeedAndTime();
-        } else {
-            clearInterval(updateInterval);
-        }
-    }, 5000);
-
-    while (mining) {
-        attempts++;
-        updateAttempts();
-
-        const random_data = generate_random_sha256();
-        
-        try {
-            const result = await argon2.hash({
-                pass: random_data,
-                salt: salt.toString(),
-                time: difficulty, // This remains constant
-                mem: memory_cost, // This is updated periodically
-                parallelism: 1,
-                type: argon2.ArgonType.Argon2id,
-                hashLen: 32
-            });
-
-            const hashed_data = result.hashHex;
-            const last_87_chars = hashed_data.slice(-87);
-
-            for (const target of stored_targets) {
-                if (last_87_chars.includes(target)) {
-                    if (target === 'XUNI' && /XUNI[0-9]/.test(hashed_data) && is_within_five_minutes_of_hour()) {
-                        found_valid_hash = true;
-                        break;
-                    } else if (target === 'XEN11') {
-                        found_valid_hash = true;
-                        const last_element = hashed_data.split('$').pop();
-                        const hash_uppercase_only = last_element.replace(/[^A-Z]/g, '');
-                        if (hash_uppercase_only.length >= 50) {
-                            console.log('%cSuperblock found', 'color: red; font-weight: bold;');
-                            status_div.innerHTML += '<br><span style="color: red; font-weight: bold;">Superblock found!</span>';
-                        }
-                        break;
-                    }
-                }
-            }
-
-            if (found_valid_hash) {
-                updateSpeedAndTime(); // Update final status
-                status_div.innerHTML += '<br>Valid hash found!';
-                
-                                // Prepare payload for verification
-                                const payload = {
-                                    hash_to_verify: hashed_data,
-                                    key: random_data,
-                                    account: account,
-                                    attempts: attempts,
-                                    hashes_per_second: lastSpeed,
-                                    worker: worker_id 
-                                };
-                
-                                try {
-                                    const response = await fetch('https://server.xoon.dev/verify', {
-                                        method: 'POST',
-                                        headers: {
-                                            'Content-Type': 'application/json',
-                                        },
-                                        body: JSON.stringify(payload)
-                                    });
-                
-                                    console.log("HTTP Status Code:", response.status);
-                                    const responseData = await response.json();
-                                    console.log("Server Response:", responseData);
-                
-                                    if (target === "XEN11" && response.status === 200) {
-                                        // Call submit_pow
-                                        const powResult = await submit_pow(account, random_data, hashed_data);
-                                        if (powResult) {
-                                            status_div.innerHTML += '<br>Proof of Work submitted successfully!';
-                                        } else {
-                                            status_div.innerHTML += '<br>Failed to submit Proof of Work.';
-                                        }
-                                    }
-                                } catch (error) {
-                                    console.error("An error occurred during verification:", error);
-                                    status_div.innerHTML += '<br>Error occurred during verification. Check console for details.';
-                                }
-                
-                // mining = false;
-                // break;
-                found_valid_hash = false;
-                continue;
-            }
-        } catch (error) {
-            console.error('Argon2 hashing error:', error);
-            status_div.innerHTML = 'Error occurred during mining. Check console for details.';
-            mining = false;
-            break;
-        }
-
-        // Allow UI to update
-        await new Promise(resolve => setTimeout(resolve, 0));
-    }
-
-    clearInterval(updateInterval);
-
+    
     if (!mining) {
-        status_div.innerHTML += '<br>Mining stopped.';
+        updateMiningParameters()
+            .then(() => {
+                mining = true;
+                miningStartTime = performance.now();
+                lastUpdateTime = miningStartTime;
+                totalHashes = 0;
+                
+                worker = new Worker('mining-worker.js');
+                worker.onmessage = handleWorkerMessage;
+                worker.postMessage({
+                    command: 'start',
+                    account: account,
+                    memory_cost: memory_cost,
+                    difficulty: difficulty,
+                    worker_id: worker_id
+                });
+                
+                difficultyUpdateInterval = setInterval(updateMiningParameters, 1800000); // 30 minutes
+                miningUpdateInterval = setInterval(updateStatus, 1000);
+                
+                saveAccount();
+            })
+            .catch(error => {
+                console.error('Failed to start mining:', error);
+                alert('Failed to fetch current difficulty. Please try again.');
+            });
+    } else {
+        alert('Mining is already in progress.');
     }
 }
 
-async function submit_pow(account, key, hash_to_verify) {
+function stopMining() {
+    if (mining) {
+        mining = false;
+        if (difficultyUpdateInterval) {
+            clearInterval(difficultyUpdateInterval);
+            difficultyUpdateInterval = null;
+        }
+        if (miningUpdateInterval) {
+            clearInterval(miningUpdateInterval);
+            miningUpdateInterval = null;
+        }
+        if (worker) {
+            worker.postMessage({ command: 'stop' });
+            worker.terminate();
+            worker = null;
+        }
+        updateStatus();
+        document.getElementById('status').innerHTML += '<br>Mining stopped.';
+    }
+}
+
+function handleWorkerMessage(e) {
+    const { type, attempts, hashed_data, random_data, isSuperblock } = e.data;
+    const status_div = document.getElementById('status');
+
+    if (type === 'update') {
+        totalHashes = attempts;
+        updateStatus();
+    } else if (type === 'found') {
+        console.log('Valid hash found!');
+        if (isSuperblock) {
+            console.log('%cSuperblock found!', 'color: red; font-weight: bold;');
+            status_div.innerHTML += '<br><span style="color: red; font-weight: bold;">Superblock found!</span>';
+        }
+        verifyAndSubmit(hashed_data, random_data, totalHashes, isSuperblock);
+    } else if (type === 'error') {
+        console.error('Worker error:', e.data.message);
+        stopMining();
+    }
+}
+
+function updateStatus() {
+    const currentTime = performance.now();
+    totalMiningTime = (currentTime - miningStartTime) / 1000;
+    
+    if (totalMiningTime > 0) {
+        lastSpeed = totalHashes / totalMiningTime;
+    }
+    
+    const status_div = document.getElementById('status');
+    status_div.innerHTML = `Mining Hashes: ${formatNumber(totalHashes)}, Speed: ${lastSpeed.toFixed(2)} H/s, Total Mining Time: ${formatTime(Math.floor(totalMiningTime))}`;
+    
+    lastUpdateTime = currentTime;
+}
+
+async function verifyAndSubmit(hashed_data, random_data, attempts, isSuperblock) {
+    const status_div = document.getElementById('status');
+    status_div.innerHTML += '<br>Verifying and submitting...';
+
+    const payload = {
+        hash_to_verify: hashed_data,
+        key: random_data,
+        account: account,
+        attempts: attempts,
+        hashes_per_second: lastSpeed,
+        worker: worker_id
+    };
+
     try {
-        // Fetch the last block record with retry
-        const response = await retryRequest(() => fetch('https://server.xoon.dev/lastblock'));
+        const response = await retryRequest(() => 
+            fetch('https://server.xoon.dev/verify', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(payload)
+            })
+        );
+
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
-        const records = await response.json();
 
-        // Process the records
-        const verified_hashes = [];
-        let output_block_id;
+        const result = await response.json();
+        console.log('Verification result:', result);
+
+        if (result.success) {
+            status_div.innerHTML += '<br>Hash verified successfully!';
+            if (isSuperblock) {
+                status_div.innerHTML += '<br><span style="color: red; font-weight: bold;">Superblock verified!</span>';
+            }
+            await submitProofOfWork(account, hashed_data, random_data);
+        } else {
+            status_div.innerHTML += '<br>Hash verification failed.';
+        }
+    } catch (error) {
+        console.error('Error during verification:', error);
+        status_div.innerHTML += '<br>Error occurred during verification. Check console for details.';
+    }
+}
+
+async function submitProofOfWork(account, hash_to_verify, key) {
+    const status_div = document.getElementById('status');
+    status_div.innerHTML += '<br>Submitting Proof of Work...';
+
+    try {
+        const response = await retryRequest(() => 
+            fetch('https://server.xoon.dev/last_block')
+        );
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const records = await response.json();
+        console.log('Records:', records);
+
+        let verified_hashes = [];
+        let output_block_id = 0;
 
         for (const record of records) {
             const { block_id, hash_to_verify: record_hash_to_verify, key: record_key, account: record_account } = record;
@@ -271,9 +271,11 @@ async function submit_pow(account, key, hash_to_verify) {
         console.log('Proof of Work successful:', result);
         console.log(`Block ID: ${output_block_id}, Merkle Root: ${merkle_root}`);
 
+        status_div.innerHTML += '<br>Proof of Work submitted successfully!';
         return result;
     } catch (error) {
         console.error('Error submitting POW:', error);
+        status_div.innerHTML += '<br>Error occurred during PoW submission. Check console for details.';
         return null;
     }
 }
@@ -298,7 +300,7 @@ function build_merkle_tree(hashes) {
         return build(new_elements);
     }
 
-    return build(elements)[0]; // Return only the root hash
+    return build(hashes)[0]; // Return only the root hash
 }
 
 async function retryRequest(fn, maxRetries = 2, delay = 10000) {
@@ -316,66 +318,18 @@ async function retryRequest(fn, maxRetries = 2, delay = 10000) {
 }
 
 function validateEthereumAddress(address) {
-    // Check basic format
     if (!/^0x[a-fA-F0-9]{40}$/.test(address)) {
         return false;
     }
-
-    // Check for presence of both uppercase and lowercase letters
     if (!/[A-F]/.test(address) || !/[a-f]/.test(address)) {
         return false;
     }
-
     return true;
 }
 
-function startMining() {
+function saveAccount() {
     const accountInput = document.getElementById('account');
-    account = accountInput.value;
-    if (!account || !validateEthereumAddress(account)) {
-        alert('Please enter a valid Ethereum address. It should contain both uppercase and lowercase letters.');
-        return;
-    }
-    
-    if (!mining) {
-        // First, update mining parameters and wait for it to complete
-        updateMiningParameters()
-            .then(() => {
-                mining = true;
-                miningStartTime = Date.now();
-                lastAttempts = 0;
-                lastSpeed = 0;
-                lastUpdateTime = miningStartTime;
-                
-                // Start the periodic update
-                difficultyUpdateInterval = setInterval(updateMiningParameters, 1800000); // 30 minutes
-                
-                // Save account
-                saveAccount();
-                
-                // Start mining
-                mine_block();
-            })
-            .catch(error => {
-                console.error('Failed to start mining:', error);
-                alert('Failed to fetch current difficulty. Please try again.');
-            });
-    } else {
-        alert('Mining is already in progress.');
-    }
-}
-
-function stopMining() {
-    if (mining) {
-        mining = false;
-        totalMiningTime += Math.floor((Date.now() - lastUpdateTime) / 1000);
-
-        // Stop the periodic difficulty updates
-        if (difficultyUpdateInterval) {
-            clearInterval(difficultyUpdateInterval);
-            difficultyUpdateInterval = null;
-        }
-    }
+    localStorage.setItem('xenBlocksAccount', accountInput.value);
 }
 
 // Load saved account address if available
@@ -386,14 +340,11 @@ window.onload = function() {
     }
 };
 
-// Save account address when mining starts
-function saveAccount() {
-    const accountInput = document.getElementById('account');
-    localStorage.setItem('xenBlocksAccount', accountInput.value);
-}
-
-window.addEventListener('beforeunload', function (e) {
-    if (mining) {
-        e.preventDefault(); // Cancel the event
+document.addEventListener('visibilitychange', function() {
+    if (document.hidden) {
+        console.log('Page hidden, continuing to mine in background');
+    } else {
+        console.log('Page visible, updating UI');
+        updateStatus();
     }
 });
