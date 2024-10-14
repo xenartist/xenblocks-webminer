@@ -49,7 +49,7 @@ async function updateMiningParameters() {
     }
 
     try {
-        const response = await fetch('https://server.xoon.dev/difficulty');
+        const response = await fetch('https://raw.githubusercontent.com/xenartist/xenblocks-difficulty-tracker/refs/heads/main/difficulty.json');
         const data = await response.json();
         
         if (data && data.difficulty) {
@@ -391,3 +391,9 @@ function saveAccount() {
     const accountInput = document.getElementById('account');
     localStorage.setItem('xenBlocksAccount', accountInput.value);
 }
+
+window.addEventListener('beforeunload', function (e) {
+    if (mining) {
+        e.preventDefault(); // Cancel the event
+    }
+});
