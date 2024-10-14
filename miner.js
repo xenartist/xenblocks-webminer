@@ -49,7 +49,7 @@ async function updateMiningParameters() {
     }
 
     try {
-        const response = await fetch('https://raw.githubusercontent.com/xenartist/xenblocks-difficulty-tracker/refs/heads/main/difficulty.json');
+        const response = await fetch('http://localhost:3000/difficulty');
         const data = await response.json();
         
         if (data && data.difficulty) {
@@ -166,7 +166,7 @@ async function mine_block() {
                                 };
                 
                                 try {
-                                    const response = await fetch('http://xenblocks.io/verify', {
+                                    const response = await fetch('http://localhost:3000/verify', {
                                         method: 'POST',
                                         headers: {
                                             'Content-Type': 'application/json',
@@ -216,13 +216,9 @@ async function mine_block() {
 }
 
 async function submit_pow(account, key, hash_to_verify) {
-    const corsProxy = 'https://cors-anywhere.herokuapp.com/';
-    const last_block_url = 'http://xenblocks.io:4445/getblocks/lastblock';
-    const submit_url = 'http://xenblocks.io:4446/send_pow';
-
     try {
         // Fetch the last block record with retry
-        const response = await retryRequest(() => fetch(corsProxy + last_block_url));
+        const response = await retryRequest(() => fetch('http://localhost:3000/lastblock'));
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
@@ -258,7 +254,7 @@ async function submit_pow(account, key, hash_to_verify) {
 
         // Send POST request with retry
         const pow_response = await retryRequest(() => 
-            fetch(corsProxy + submit_url, {
+            fetch('http://localhost:3000/send_pow', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -402,7 +398,7 @@ function testXenBlocksAPI() {
         statusElement.textContent = 'Testing API...';
     }
 
-    const url = 'https://cors-anywhere.herokuapp.com/http://xenblocks.io:4445/getblocks/lastblock';
+    const url = 'http://localhost:3000/lastblock';
     console.log('Sending request to:', url);
 
     fetch(url)
