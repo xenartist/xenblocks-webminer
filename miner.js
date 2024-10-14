@@ -215,7 +215,7 @@ async function submitProofOfWork(account, hash_to_verify, key) {
 
     try {
         const response = await retryRequest(() => 
-            fetch('https://server.xoon.dev/last_block')
+            fetch('https://server.xoon.dev/lastblock')
         );
 
         if (!response.ok) {
