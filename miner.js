@@ -3,7 +3,6 @@ let memory_cost = 1500; // Initial value, in KB
 const difficulty = 1; // Fixed value for Argon2 time parameter
 let account = '';
 let worker_id = '1';
-const stored_targets = ['XEN11', 'XUNI'];
 let mining = false;
 let totalMiningTime = 0;
 let miningStartTime;
@@ -19,6 +18,8 @@ let displayedHashes = 0;
 
 let difficultyUpdateInterval;
 let miningUpdateInterval;
+
+let TEST_MODE = false;
 
 // Helper functions
 function formatNumber(num) {
@@ -51,6 +52,10 @@ async function updateMiningParameters() {
         
         if (data && data.difficulty) {
             memory_cost = parseInt(data.difficulty);
+            //JUST FOR TESTING
+            if (TEST_MODE) {
+                memory_cost = 8;
+            }
             console.log(`Updated mining parameters: Difficulty=${memory_cost}`);
             
             if (difficultyElement) {
