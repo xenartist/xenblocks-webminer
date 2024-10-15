@@ -25,7 +25,7 @@ function is_within_five_minutes_of_hour() {
 async function mine_block() {
     let attempts = 0;
     const remove_prefix_address = account.slice(2);
-    const salt = CryptoJS.enc.Hex.parse(remove_prefix_address);
+    const salt = new Uint8Array(remove_prefix_address.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
 
     while (mining) {
         attempts++;
@@ -35,7 +35,7 @@ async function mine_block() {
         try {
             const result = await argon2.hash({
                 pass: random_data,
-                salt: salt.toString(),
+                salt: salt,
                 time: difficulty,
                 mem: memory_cost,
                 parallelism: 1,
@@ -43,7 +43,7 @@ async function mine_block() {
                 hashLen: 64
             });
 
-            const hashed_data = result.hashHex;
+            const hashed_data = result.encoded;
             const last_87_chars = hashed_data.slice(-87);
 
             for (const target of stored_targets) {

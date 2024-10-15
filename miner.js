@@ -2,7 +2,7 @@
 let memory_cost = 1500; // Initial value, in KB
 const difficulty = 1; // Fixed value for Argon2 time parameter
 let account = '';
-let worker_id = '0';
+let worker_id = '1';
 const stored_targets = ['XEN11', 'XUNI'];
 let mining = false;
 let totalMiningTime = 0;
