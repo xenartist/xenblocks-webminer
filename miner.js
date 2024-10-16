@@ -6,14 +6,7 @@ let worker_id = '1';
 let mining = false;
 let totalMiningTime = 0;
 let miningStartTime;
-
-let lastAttempts = 0;
-let lastSpeed = 0;
 let lastUpdateTime = 0;
-let lastVisibleTime = 0;
-
-let totalHashes = 0;
-let displayedHashes = 0;
 
 let difficultyUpdateInterval;
 let miningUpdateInterval;
@@ -110,7 +103,6 @@ function startMining() {
                 mining = true;
                 miningStartTime = performance.now();
                 lastUpdateTime = miningStartTime;
-                totalHashes = 0;
                 
                 workerCount = parseInt(document.getElementById('workerCount').value);
                 
@@ -129,7 +121,7 @@ function startMining() {
                     workerSpeeds[`${i + 1}`] = 0;
                 }
                 
-                difficultyUpdateInterval = setInterval(updateMiningParameters, 1800000); // 30 minutes
+                difficultyUpdateInterval = setInterval(updateMiningParameters, 600000); // 10 minutes
                 miningUpdateInterval = setInterval(updateStatus, 1000);
                 
                 saveAccount();
@@ -180,7 +172,7 @@ function handleWorkerMessage(e) {
             console.log('%cSuperblock found!', 'color: red; font-weight: bold;');
             status_div.innerHTML += '<br><span style="color: red; font-weight: bold;">Superblock found!</span>';
         }
-        verifyAndSubmit(hashed_data, random_data, totalHashes, isSuperblock);
+        verifyAndSubmit(hashed_data, random_data, isSuperblock, worker_id);
     } else if (type === 'error') {
         console.error(`Worker ${worker_id} error:`, e.data.message);
         stopMining();
@@ -200,7 +192,7 @@ function updateStatus() {
     lastUpdateTime = currentTime;
 }
 
-async function verifyAndSubmit(hashed_data, random_data, attempts, isSuperblock) {
+async function verifyAndSubmit(hashed_data, random_data, isSuperblock, worker_id) {
     const status_div = document.getElementById('status');
     status_div.innerHTML += '<br>Verifying and submitting...';
 
@@ -208,8 +200,8 @@ async function verifyAndSubmit(hashed_data, random_data, attempts, isSuperblock)
         hash_to_verify: hashed_data,
         key: random_data,
         account: account,
-        attempts: attempts,
-        hashes_per_second: lastSpeed,
+        attempts: getTotalHashes(),
+        hashes_per_second: getTotalSpeed(),
         worker: worker_id
     };
 
