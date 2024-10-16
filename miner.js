@@ -12,14 +12,37 @@ let lastSpeed = 0;
 let lastUpdateTime = 0;
 let lastVisibleTime = 0;
 
-let worker;
 let totalHashes = 0;
 let displayedHashes = 0;
 
 let difficultyUpdateInterval;
 let miningUpdateInterval;
 
+let workers = [];
+let workerCount = 1;
+let workerHashes = {};
+let workerSpeeds = {};
+
 let TEST_MODE = false;
+
+function populateWorkerOptions() {
+    const maxWorkers = navigator.hardwareConcurrency || 4; 
+    const select = document.getElementById('workerCount');
+    
+    select.appendChild(new Option("1", "1"));
+    
+    for (let i = 4; i <= maxWorkers; i += 4) {
+        select.appendChild(new Option(i.toString(), i.toString()));
+    }
+}
+
+function getTotalHashes() {
+    return Object.values(workerHashes).reduce((sum, hash) => sum + hash, 0);
+}
+
+function getTotalSpeed() {
+    return Object.values(workerSpeeds).reduce((sum, speed) => sum + speed, 0);
+}
 
 // Helper functions
 function formatNumber(num) {
@@ -89,15 +112,22 @@ function startMining() {
                 lastUpdateTime = miningStartTime;
                 totalHashes = 0;
                 
-                worker = new Worker('mining-worker.js');
-                worker.onmessage = handleWorkerMessage;
-                worker.postMessage({
-                    command: 'start',
-                    account: account,
-                    memory_cost: memory_cost,
-                    difficulty: difficulty,
-                    worker_id: worker_id
-                });
+                workerCount = parseInt(document.getElementById('workerCount').value);
+                
+                for (let i = 0; i < workerCount; i++) {
+                    const worker = new Worker('mining-worker.js');
+                    worker.onmessage = handleWorkerMessage;
+                    worker.postMessage({
+                        command: 'start',
+                        account: account,
+                        memory_cost: memory_cost,
+                        difficulty: difficulty,
+                        worker_id: `${i + 1}`
+                    });
+                    workers.push(worker);
+                    workerHashes[`${i + 1}`] = 0;
+                    workerSpeeds[`${i + 1}`] = 0;
+                }
                 
                 difficultyUpdateInterval = setInterval(updateMiningParameters, 1800000); // 30 minutes
                 miningUpdateInterval = setInterval(updateStatus, 1000);
@@ -124,32 +154,35 @@ function stopMining() {
             clearInterval(miningUpdateInterval);
             miningUpdateInterval = null;
         }
-        if (worker) {
+        workers.forEach(worker => {
             worker.postMessage({ command: 'stop' });
             worker.terminate();
-            worker = null;
-        }
+        });
+        workers = [];
+        workerHashes = {};
+        workerSpeeds = {};
         updateStatus();
         document.getElementById('status').innerHTML += '<br>Mining stopped.';
     }
 }
 
 function handleWorkerMessage(e) {
-    const { type, attempts, hashed_data, random_data, isSuperblock } = e.data;
+    const { type, attempts, hashed_data, random_data, isSuperblock, worker_id } = e.data;
     const status_div = document.getElementById('status');
 
     if (type === 'update') {
-        totalHashes = attempts;
+        workerHashes[worker_id] = attempts;
+        workerSpeeds[worker_id] = attempts / (performance.now() - miningStartTime) * 1000;
         updateStatus();
     } else if (type === 'found') {
-        console.log('Valid hash found!');
+        console.log(`Valid hash found by worker ${worker_id}!`);
         if (isSuperblock) {
             console.log('%cSuperblock found!', 'color: red; font-weight: bold;');
             status_div.innerHTML += '<br><span style="color: red; font-weight: bold;">Superblock found!</span>';
         }
         verifyAndSubmit(hashed_data, random_data, totalHashes, isSuperblock);
     } else if (type === 'error') {
-        console.error('Worker error:', e.data.message);
+        console.error(`Worker ${worker_id} error:`, e.data.message);
         stopMining();
     }
 }
@@ -158,12 +191,11 @@ function updateStatus() {
     const currentTime = performance.now();
     totalMiningTime = (currentTime - miningStartTime) / 1000;
     
-    if (totalMiningTime > 0) {
-        lastSpeed = totalHashes / totalMiningTime;
-    }
+    const totalHashes = getTotalHashes();
+    const totalSpeed = getTotalSpeed();
     
     const status_div = document.getElementById('status');
-    status_div.innerHTML = `Mining Hashes: ${formatNumber(totalHashes)}, Speed: ${lastSpeed.toFixed(2)} H/s, Total Mining Time: ${formatTime(Math.floor(totalMiningTime))}`;
+    status_div.innerHTML = `Mining Hashes: ${formatNumber(totalHashes)}, Speed: ${totalSpeed.toFixed(2)} H/s, Total Mining Time: ${formatTime(Math.floor(totalMiningTime))}`;
     
     lastUpdateTime = currentTime;
 }
@@ -343,6 +375,7 @@ window.onload = function() {
     if (savedAccount) {
         document.getElementById('account').value = savedAccount;
     }
+    populateWorkerOptions();
 };
 
 document.addEventListener('visibilitychange', function() {

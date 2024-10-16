@@ -26,7 +26,8 @@ async function mine_block() {
     let attempts = 0;
     const remove_prefix_address = account.slice(2);
     const salt = new Uint8Array(remove_prefix_address.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
-
+    let lastUpdateTime = performance.now();
+    
     while (mining) {
         attempts++;
 
@@ -54,7 +55,8 @@ async function mine_block() {
                             hashed_data,
                             random_data,
                             attempts,
-                            isSuperblock: false
+                            isSuperblock: false,
+                            worker_id
                         });
                         break;
                     } else if (target === 'XEN11') {
@@ -67,20 +69,21 @@ async function mine_block() {
                             hashed_data,
                             random_data,
                             attempts,
-                            isSuperblock
+                            isSuperblock,
+                            worker_id
                         });
                         break;
                     }
                 }
             }
         } catch (error) {
-            self.postMessage({ type: 'error', message: error.toString() });
+            self.postMessage({ type: 'error', message: error.toString(), worker_id });
             mining = false;
             break;
         }
 
         // update attempts to UI
-        self.postMessage({ type: 'update', attempts });
+        self.postMessage({ type: 'update', attempts, worker_id });
     }
 }
 
