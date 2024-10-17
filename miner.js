@@ -1,11 +1,12 @@
 // Global variables
 let memory_cost = 1500; // Initial value, in KB
+let previous_memory_cost = memory_cost;
 const difficulty = 1; // Fixed value for Argon2 time parameter
 let account = '';
 let worker_id = '1';
 let mining = false;
 let totalMiningTime = 0;
-let miningStartTime;
+let miningStartTime = 0;
 let lastUpdateTime = 0;
 
 let difficultyUpdateInterval;
@@ -15,6 +16,10 @@ let workers = [];
 let workerCount = 1;
 let workerHashes = {};
 let workerSpeeds = {};
+
+let xnmCount = 0;
+let xuniCount = 0;
+let xblkCount = 0;
 
 let TEST_MODE = false;
 
@@ -72,7 +77,11 @@ async function updateMiningParameters() {
             if (TEST_MODE) {
                 memory_cost = 8;
             }
-            console.log(`Updated mining parameters: Difficulty=${memory_cost}`);
+
+            if (memory_cost !== previous_memory_cost) {
+                previous_memory_cost = memory_cost;
+                console.log(`Difficulty changed: ${previous_memory_cost}`);
+            }
             
             if (difficultyElement) {
                 difficultyElement.textContent = `Current Difficulty: ${memory_cost.toLocaleString()}`;
@@ -93,6 +102,7 @@ function startMining() {
     const accountInput = document.getElementById('account');
     account = accountInput.value;
     if (!account || !validateEthereumAddress(account)) {
+        updateLog('Please enter a valid Ethereum address. It should contain both uppercase and lowercase letters.');
         alert('Please enter a valid Ethereum address. It should contain both uppercase and lowercase letters.');
         return;
     }
@@ -125,9 +135,11 @@ function startMining() {
                 miningUpdateInterval = setInterval(updateStatus, 1000);
                 
                 saveAccount();
+                updateLog('Mining started!');
             })
             .catch(error => {
                 console.error('Failed to start mining:', error);
+                updateLog('Failed to fetch current difficulty. Please try again.');
                 alert('Failed to fetch current difficulty. Please try again.');
             });
     } else {
@@ -154,23 +166,25 @@ function stopMining() {
         workerHashes = {};
         workerSpeeds = {};
         updateStatus();
-        document.getElementById('status').innerHTML += '<br>Mining stopped.';
+        xnmCount = 0;
+        xuniCount = 0;
+        xblkCount = 0;
+        updateCounters();
+        updateLog('Mining stopped.');
     }
 }
 
 function handleWorkerMessage(e) {
     const { type, attempts, hashed_data, random_data, isSuperblock, worker_id } = e.data;
-    const status_div = document.getElementById('status');
 
     if (type === 'update') {
         workerHashes[worker_id] = attempts;
         workerSpeeds[worker_id] = attempts / (performance.now() - miningStartTime) * 1000;
         updateStatus();
     } else if (type === 'found') {
-        console.log(`Valid hash found by worker ${worker_id}!`);
+        updateLog(`Valid hash found by worker ${worker_id}!`);
         if (isSuperblock) {
-            console.log('%cSuperblock found!', 'color: red; font-weight: bold;');
-            status_div.innerHTML += '<br><span style="color: red; font-weight: bold;">Superblock found!</span>';
+            updateLog('%cSuperblock found!', 'color: red; font-weight: bold;');
         }
         verifyAndSubmit(hashed_data, random_data, isSuperblock, worker_id);
     } else if (type === 'error') {
@@ -192,9 +206,15 @@ function updateStatus() {
     lastUpdateTime = currentTime;
 }
 
+function updateLog(message) {
+    const logArea = document.getElementById('log-area');
+    const timestamp = new Date().toLocaleTimeString();
+    logArea.innerHTML += `<p>[${timestamp}] ${message}</p>`;
+    logArea.scrollTop = logArea.scrollHeight;
+}
+
 async function verifyAndSubmit(hashed_data, random_data, isSuperblock, worker_id) {
-    const status_div = document.getElementById('status');
-    status_div.innerHTML += '<br>Verifying and submitting...';
+    updateLog('Verifying and submitting...');
 
     const payload = {
         hash_to_verify: hashed_data,
@@ -204,6 +224,8 @@ async function verifyAndSubmit(hashed_data, random_data, isSuperblock, worker_id
         hashes_per_second: getTotalSpeed(),
         worker: worker_id
     };
+
+    console.log('Payload:', payload);
 
     try {
         const response = await retryRequest(() => 
@@ -221,26 +243,43 @@ async function verifyAndSubmit(hashed_data, random_data, isSuperblock, worker_id
         }
 
         const result = await response.json();
-        console.log('Verification result:', result);
+        updateLog(`Verification result: ${result}`);
 
-        if (result.success) {
-            status_div.innerHTML += '<br>Hash verified successfully!';
+        if (response.ok) {
+            console.log('Hash verified successfully!');
             if (isSuperblock) {
-                status_div.innerHTML += '<br><span style="color: red; font-weight: bold;">Superblock verified!</span>';
+                updateLog('XBLK verified!');
+            } else if (hashed_data.includes('XEN11')) {
+                updateLog('XNM verified!');
+            } else {
+                xuniCount++;
+                updateLog('XUNI verified!');
+                updateCounters();
             }
-            await submitProofOfWork(account, hashed_data, random_data);
+
+            const powResult = await submitProofOfWork(account, hashed_data, random_data);
+            if (powResult) {
+                if (isSuperblock) {
+                    xblkCount++;
+                    updateLog('Superblock found, verified, and submitted!');
+                } else if (hashed_data.includes('XEN11')) {
+                    xnmCount++;
+                    updateLog('XNM found, verified, and submitted!');
+                }
+                updateCounters();
+            }
         } else {
-            status_div.innerHTML += '<br>Hash verification failed.';
+            updateLog('Hash verification failed.');
         }
     } catch (error) {
         console.error('Error during verification:', error);
-        status_div.innerHTML += '<br>Error occurred during verification. Check console for details.';
+        updateLog('Error occurred during verification. Check console for details.');
     }
 }
 
 async function submitProofOfWork(account, hash_to_verify, key) {
     const status_div = document.getElementById('status');
-    status_div.innerHTML += '<br>Submitting Proof of Work...';
+    updateLog('Submitting Proof of Work...');
 
     try {
         const response = await retryRequest(() => 
@@ -252,7 +291,7 @@ async function submitProofOfWork(account, hash_to_verify, key) {
         }
 
         const records = await response.json();
-        console.log('Records:', records);
+        updateLog(`Records: ${records}`);
 
         let verified_hashes = [];
         let output_block_id = 0;
@@ -297,14 +336,14 @@ async function submitProofOfWork(account, hash_to_verify, key) {
         }
 
         const result = await pow_response.json();
-        console.log('Proof of Work successful:', result);
         console.log(`Block ID: ${output_block_id}, Merkle Root: ${merkle_root}`);
+        updateLog(`Proof of Work submitted successfully!`);
 
         status_div.innerHTML += '<br>Proof of Work submitted successfully!';
         return result;
     } catch (error) {
         console.error('Error submitting POW:', error);
-        status_div.innerHTML += '<br>Error occurred during PoW submission. Check console for details.';
+        updateLog('Error occurred during PoW submission. Check console for details.');
         return null;
     }
 }
@@ -354,6 +393,12 @@ function validateEthereumAddress(address) {
         return false;
     }
     return true;
+}
+
+function updateCounters() {
+    document.getElementById('xnm-count').textContent = xnmCount;
+    document.getElementById('xuni-count').textContent = xuniCount;
+    document.getElementById('xblk-count').textContent = xblkCount;
 }
 
 function saveAccount() {

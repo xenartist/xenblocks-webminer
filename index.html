@@ -20,10 +20,21 @@
     </select>
     <br><br>
     <div id="current-difficulty">Current Difficulty: Not fetched yet</div>
+    <br>
     <button onclick="startMining()">Start Mining</button>
     <button onclick="stopMining()">Stop Mining</button>
     <br><br>
     <div id="status"></div>
+    <br>
+    <div id="counters">
+        <span class="counter">XBLK: <span id="xblk-count">0</span></span>
+        <span class="counter">XNM: <span id="xnm-count">0</span></span>
+        <span class="counter">XUNI: <span id="xuni-count">0</span></span>
+    </div>
+    <br>
+    <div id="log-container">Logs</div>
+        <div id="log-area" style="width: 420px; height: 160px; overflow-y: auto; border: 1px solid #ccc; padding: 10px;"></div>
+    </div>
     <script src="miner.js"></script>
     <p>by <a href="https://x.com/xen_artist" target="_blank">@xen_artist</a></p>
     <p>Projects (GitHub):</p>
