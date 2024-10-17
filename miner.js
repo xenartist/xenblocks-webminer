@@ -209,7 +209,7 @@ function updateStatus() {
 function updateLog(message) {
     const logArea = document.getElementById('log-area');
     const timestamp = new Date().toLocaleTimeString();
-    logArea.innerHTML += `<p>[${timestamp}] ${message}</p>`;
+    logArea.innerHTML += `<div class="log-entry">[${timestamp}] ${message}</div>`;
     logArea.scrollTop = logArea.scrollHeight;
 }
 
