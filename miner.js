@@ -121,7 +121,7 @@ function startMining() {
                     workerSpeeds[`${i + 1}`] = 0;
                 }
                 
-                difficultyUpdateInterval = setInterval(updateMiningParameters, 600000); // 10 minutes
+                difficultyUpdateInterval = setInterval(updateMiningParameters, 300000); // 5 minutes
                 miningUpdateInterval = setInterval(updateStatus, 1000);
                 
                 saveAccount();
