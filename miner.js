@@ -57,7 +57,7 @@ async function updateMiningParameters() {
 
     try {
         const response = await retryRequest(() => 
-            fetch('https://raw.githubusercontent.com/xenartist/xenblocks-difficulty-tracker/refs/heads/main/difficulty.json')
+            fetch(`https://gist.githubusercontent.com/xenartist/a43d439c635c0278515a15c5e49b946b/raw/difficulty.json?_=${Date.now()}`)
         );
         
         if (!response.ok) {
@@ -121,7 +121,7 @@ function startMining() {
                     workerSpeeds[`${i + 1}`] = 0;
                 }
                 
-                difficultyUpdateInterval = setInterval(updateMiningParameters, 300000); // 5 minutes
+                difficultyUpdateInterval = setInterval(updateMiningParameters, 60000); // 1 minute
                 miningUpdateInterval = setInterval(updateStatus, 1000);
                 
                 saveAccount();
