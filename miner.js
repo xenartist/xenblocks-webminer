@@ -417,9 +417,9 @@ window.onload = function() {
 
 document.addEventListener('visibilitychange', function() {
     if (document.hidden) {
-        console.log('Page hidden, continuing to mine in background');
+        // console.log('Page hidden, continuing to mine in background');
     } else {
-        console.log('Page visible, updating UI');
+        // console.log('Page visible, updating UI');
         updateStatus();
     }
 });
