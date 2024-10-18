@@ -243,31 +243,34 @@ async function verifyAndSubmit(hashed_data, random_data, isSuperblock, worker_id
         }
 
         const result = await response.json();
-        updateLog(`Verification result: ${result}`);
+        updateLog(`Verification result: ${JSON.stringify(result, null, 2)}`);
 
         if (response.ok) {
             console.log('Hash verified successfully!');
-            if (isSuperblock) {
-                updateLog('XBLK verified!');
-            } else if (hashed_data.includes('XEN11')) {
-                updateLog('XNM verified!');
-            } else {
+
+            if (hashed_data.includes('XUNI')) {
                 xuniCount++;
                 updateLog('XUNI verified!');
                 updateCounters();
-            }
-
-            const powResult = await submitProofOfWork(account, hashed_data, random_data);
-            if (powResult) {
+            } else if (hashed_data.includes('XEN11')) {
                 if (isSuperblock) {
-                    xblkCount++;
-                    updateLog('Superblock found, verified, and submitted!');
-                } else if (hashed_data.includes('XEN11')) {
-                    xnmCount++;
-                    updateLog('XNM found, verified, and submitted!');
+                    updateLog('XBLK verified!');
+                } else {
+                    updateLog('XNM verified!');
                 }
-                updateCounters();
-            }
+
+                const powResult = await submitProofOfWork(account, hashed_data, random_data);
+                if (powResult) {
+                    if (isSuperblock) {
+                        xblkCount++;
+                        updateLog('Superblock found, verified, and submitted!');
+                    } else if (hashed_data.includes('XEN11')) {
+                        xnmCount++;
+                        updateLog('XNM found, verified, and submitted!');
+                    }
+                    updateCounters();
+                }
+            } 
         } else {
             updateLog('Hash verification failed.');
         }
@@ -291,7 +294,6 @@ async function submitProofOfWork(account, hash_to_verify, key) {
         }
 
         const records = await response.json();
-        updateLog(`Records: ${records}`);
 
         let verified_hashes = [];
         let output_block_id = 0;
