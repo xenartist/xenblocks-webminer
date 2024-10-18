@@ -264,7 +264,7 @@ async function verifyAndSubmit(hashed_data, random_data, isSuperblock, worker_id
                     if (isSuperblock) {
                         xblkCount++;
                         updateLog('Superblock found, verified, and submitted!');
-                    } else if (hashed_data.includes('XEN11')) {
+                    } else {
                         xnmCount++;
                         updateLog('XNM found, verified, and submitted!');
                     }
