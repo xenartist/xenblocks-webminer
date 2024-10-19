@@ -5,11 +5,6 @@ let mining = false;
 let account, memory_cost, difficulty, worker_id;
 const stored_targets = ['XEN11', 'XUNI'];
 
-// Helper functions
-function hash_value(value) {
-    return CryptoJS.SHA256(value).toString();
-}
-
 function generate_random_sha256(max_length = 128) {
     const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()';
     const random_string = Array.from({length: Math.floor(Math.random() * max_length) + 1}, () => characters[Math.floor(Math.random() * characters.length)]).join('');

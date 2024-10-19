@@ -54,6 +54,10 @@ function formatTime(seconds) {
     return `${hours}h ${minutes}m ${secs}s`;
 }
 
+function hash_value(value) {
+    return CryptoJS.SHA256(value).toString();
+}
+
 async function updateMiningParameters() {
     const difficultyElement = document.getElementById('current-difficulty');
     if (difficultyElement) {
@@ -280,6 +284,31 @@ async function verifyAndSubmit(hashed_data, random_data, isSuperblock, worker_id
     }
 }
 
+async function verifyArgon2Hash(hashResult, password) {
+    const [, type, version, options, salt, hash_value] = hashResult.split('$');
+    const [m, t, p] = options.split(',');
+    const memory_cost = parseInt(m.split('=')[1]);
+    const time_cost = parseInt(t.split('=')[1]);
+    const parallelism = parseInt(p.split('=')[1]);
+
+    const saltBytes = atob(salt)
+    .split('')
+    .map(char => char.charCodeAt(0));
+    const decodedSalt = new Uint8Array(saltBytes);
+
+    const newHashResult = await argon2.hash({
+        pass: password,
+        salt: decodedSalt, 
+        type: argon2.ArgonType.Argon2id,
+        mem: memory_cost,
+        time: time_cost,
+        parallelism: parallelism,
+        hashLen: 64
+    });
+
+    return newHashResult.encoded === hashResult;
+}
+
 async function submitProofOfWork(account, hash_to_verify, key) {
     const status_div = document.getElementById('status');
     updateLog('Submitting Proof of Work...');
@@ -301,8 +330,8 @@ async function submitProofOfWork(account, hash_to_verify, key) {
         for (const record of records) {
             const { block_id, hash_to_verify: record_hash_to_verify, key: record_key, account: record_account } = record;
 
-            // Verify the hash using Argon2
-            if (await argon2.verify(record_hash_to_verify, record_key)) {
+            // Verify the hash using customized Argon2Hash function
+            if (await verifyArgon2Hash(record_hash_to_verify, record_key)) {
                 verified_hashes.push(hash_value(block_id + record_hash_to_verify + record_key + record_account));
             }
 
@@ -352,25 +381,31 @@ async function submitProofOfWork(account, hash_to_verify, key) {
 
 function build_merkle_tree(hashes) {
     let merkle_tree = {};
-
-    function build(elements) {
-        if (elements.length === 1) {
-            return [elements[0], merkle_tree];
-        }
-
-        let new_elements = [];
-        for (let i = 0; i < elements.length; i += 2) {
-            let left = elements[i];
-            let right = (i + 1 < elements.length) ? elements[i + 1] : left;
+    
+    if (hashes.length === 0) {
+        return {
+            root: null,
+            tree: {}
+        };
+    }
+    
+    while (hashes.length > 1) {
+        let new_level = [];
+        for (let i = 0; i < hashes.length; i += 2) {
+            let left = hashes[i];
+            let right = (i + 1 < hashes.length) ? hashes[i + 1] : left;
             let combined = left + right;
             let new_hash = hash_value(combined);
             merkle_tree[new_hash] = { left: left, right: right };
-            new_elements.push(new_hash);
+            new_level.push(new_hash);
         }
-        return build(new_elements);
+        hashes = new_level;
     }
-
-    return build(hashes)[0]; // Return only the root hash
+    
+    return {
+        root: hashes[0],
+        tree: merkle_tree
+    };
 }
 
 async function retryRequest(fn, maxRetries = 2, delay = 10000) {
