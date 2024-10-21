@@ -92,5 +92,7 @@ self.onmessage = function(e) {
         mine_block();
     } else if (e.data.command === 'stop') {
         mining = false;
+    } else if (e.data.command === 'update_memory_cost') {
+        memory_cost = e.data.memory_cost;
     }
 };

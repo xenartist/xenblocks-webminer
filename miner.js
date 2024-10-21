@@ -85,6 +85,14 @@ async function updateMiningParameters() {
             if (memory_cost !== previous_memory_cost) {
                 previous_memory_cost = memory_cost;
                 console.log(`Difficulty changed: ${previous_memory_cost}`);
+
+                // Update all workers with the new difficulty
+                workers.forEach(worker => {
+                    worker.postMessage({
+                        command: 'update_memory_cost',
+                        memory_cost: memory_cost
+                    });
+                });
             }
             
             if (difficultyElement) {
